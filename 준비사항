@@ -1,0 +1,2 @@
+$ brew tap spring-io/tap
+$ brew install spring-boot
