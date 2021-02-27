@@ -5,7 +5,7 @@
 #   HOST=localhost PORT=7000 ./test-em-all.bash
 #
 : ${HOST=localhost}
-: ${PORT=7000}
+: ${PORT=8080}
 : ${PROD_ID_REVS_RECS=1}
 : ${PROD_ID_NOT_FOUND=13}
 : ${PROD_ID_NO_RECS=113}
@@ -49,11 +49,53 @@ function assertEqual() {
   fi
 }
 
+function testUrl() {
+  url=$@
+  if curl $url -ks -f -o /dev/null
+  then
+    echo "ok"
+    return 0
+  else
+    echo -n "not yet"
+    return 1
+  fi;
+}
+
+function waitForService() {
+  url=$@
+  echo -n "wait for: $url... "
+  n=0
+  until testUrl $url
+  do
+    n=$((n+1))
+    if [[ $n == 100 ]]
+    then
+      echo "give up"
+      exit 1
+    else
+      sleep 6
+      echo -n ", retry #$n "
+    fi
+  done
+}
+
 set -e
+
+echo "start:" 'date'
 
 echo "HOST=${HOST}"
 echo "PORT=${PORT}"
 
+if [[ $@ == *"start"* ]]
+then
+  echo "restarting the test environment..."
+  echo "$ docker-compose down"
+  docker-compose down
+  echo "$ docker-compose up -d"
+  docker-compose up -d
+fi
+
+waitForService http://$HOST:$PORT/product-composite/1
 
 # Verify that a normal request works, expect three recommendations and three reviews
 assertCurl 200 "curl http://$HOST:$PORT/product-composite/$PROD_ID_REVS_RECS -s"
@@ -84,5 +126,12 @@ assertEqual "\"Invalid product Id: -1\"" "$(echo $RESPONSE | jq .message)"
 # Verify that a 400 (Bad Request) error error is returned for a productId that is not a number, i.e. invalid format
 assertCurl 400 "curl http://$HOST:$PORT/product-composite/invalidProductId -s"
 assertEqual "\"Type mismatch.\"" "$(echo $RESPONSE | jq .message)"
+
+if [[ $@ == *"stop" ]]
+then
+  echo "we are done. stopping the test environment..."
+  echo "$ docker-compose down"
+  docker-compose down
+fi
 
 echo "End, all tests OK:" `date`
