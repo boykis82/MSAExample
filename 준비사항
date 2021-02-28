@@ -1,2 +1,4 @@
 $ brew tap spring-io/tap
 $ brew install spring-boot
+
+ http://localhost:8080/swagger-ui/index.html
