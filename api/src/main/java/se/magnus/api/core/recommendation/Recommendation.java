@@ -3,10 +3,12 @@ package se.magnus.api.core.recommendation;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 @Getter
+@Setter
 public class Recommendation {
     private int productId;
     private int recommendationId;
@@ -15,46 +17,4 @@ public class Recommendation {
     private String content;
     private String serviceAddress;
 
-    /*
-    public Recommendation() {
-        productId = 0;
-        recommendationId = 0;
-        author = null;
-        rate = 0;
-        content = null;
-        serviceAddress = null;
-    }
-
-    public Recommendation(int productId, int recommendationId, String author, int rate, String content, String serviceAddress) {
-        this.productId = productId;
-        this.recommendationId = recommendationId;
-        this.author = author;
-        this.rate = rate;
-        this.content = content;
-        this.serviceAddress = serviceAddress;
-    }
-
-    public int getProductId() {
-        return productId;
-    }
-
-    public int getRecommendationId() {
-        return recommendationId;
-    }
-
-    public String getAuthor() {
-        return author;
-    }
-
-    public int getRate() {
-        return rate;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public String getServiceAddress() {
-        return serviceAddress;
-    }*/
 }

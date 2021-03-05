@@ -12,7 +12,7 @@ import springfox.documentation.service.Contact;
 import springfox.documentation.spring.web.plugins.Docket;
 
 import static java.util.Collections.emptyList;
-import static org.springframework.web.bind.annotation.RequestMethod.GET;
+import static org.springframework.web.bind.annotation.RequestMethod.*;
 import static springfox.documentation.builders.RequestHandlerSelectors.basePackage;
 import static springfox.documentation.spi.DocumentationType.SWAGGER_2;
 
@@ -44,6 +44,8 @@ public class ProductCompositeServiceApplication {
 				.paths(PathSelectors.any())
 				.build()
 				.globalResponseMessage(GET, emptyList())
+				.globalResponseMessage(POST, emptyList())
+				.globalResponseMessage(DELETE, emptyList())
 				.apiInfo(new ApiInfo(
 						apiTitle,
 						apiDescription,

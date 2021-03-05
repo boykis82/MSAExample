@@ -1,23 +1,50 @@
 version: '2.1'
 
 services:
+
+  # $ mysql -uroot -h127.0.0.1 -p
+  mysql:
+    image: mysql:5.7
+    mem_limit: 350m
+    ports:
+      - "13306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpwd
+      - MYSQL_DATABASE=msa
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=pwd
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-uuser", "-ppwd", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   product:
     build: microservices/product-service
     mem_limit: 350m
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   recommendation:
     build: microservices/recommendation-service
     mem_limit: 350m
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   review:
     build: microservices/review-service
     mem_limit: 350m
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   product-composite:
     build: microservices/product-composite-service

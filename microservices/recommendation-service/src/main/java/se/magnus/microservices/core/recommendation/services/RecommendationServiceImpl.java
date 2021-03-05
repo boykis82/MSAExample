@@ -1,12 +1,17 @@
 package se.magnus.microservices.core.recommendation.services;
 
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.web.bind.annotation.RestController;
 import se.magnus.api.core.recommendation.Recommendation;
 import se.magnus.api.core.recommendation.RecommendationService;
+import se.magnus.microservices.core.recommendation.persistence.RecommendationEntity;
+import se.magnus.microservices.core.recommendation.persistence.RecommendationRepository;
 import se.magnus.util.exceptions.InvalidInputException;
 import se.magnus.util.exceptions.NotFoundException;
 import se.magnus.util.http.ServiceUtil;
@@ -15,31 +20,51 @@ import java.util.ArrayList;
 import java.util.List;
 
 @RestController
+@Slf4j
 public class RecommendationServiceImpl implements RecommendationService {
-    private static final Logger LOG = LoggerFactory.getLogger(RecommendationServiceImpl.class);
+    private final RecommendationRepository repository;
+    private final RecommendationMapper mapper;
 
     private final ServiceUtil serviceUtil;
 
     @Autowired
-    public RecommendationServiceImpl(ServiceUtil serviceUtil) {
+    public RecommendationServiceImpl(RecommendationRepository repository,
+                                    RecommendationMapper mapper,
+                                     ServiceUtil serviceUtil) {
+        this.repository = repository;
+        this.mapper = mapper;
         this.serviceUtil = serviceUtil;
     }
 
     @Override 
     public List<Recommendation> getRecommendations(int productId) {
         if (productId < 1) throw new InvalidInputException("Invalid product Id: " + productId);
-        if (productId == 113) {
-            LOG.debug("no recommendations found for product Id: {}", productId);
-            return new ArrayList<>();
-        }
 
-        List<Recommendation> list = new ArrayList<>();
-        list.add(new Recommendation(productId, 1, "author 1", 1, "content 1", serviceUtil.getServiceAddress()));
-        list.add(new Recommendation(productId, 2, "author 2", 2, "content 2", serviceUtil.getServiceAddress()));
-        list.add(new Recommendation(productId, 3, "author 3", 3, "content 3", serviceUtil.getServiceAddress()));
+        List<RecommendationEntity> entityList = repository.findByProductId(productId);
+        List<Recommendation> list = mapper.entityListToApiList(entityList);
+        list.forEach(e -> e.setServiceAddress(serviceUtil.getServiceAddress()));
 
-        LOG.debug("/recommendation response size: {}", list.size());
+        log.debug("/recommendation response size: {}", list.size());
 
         return list;
-    }   
+    }
+
+    @Override
+    public Recommendation createRecommendation(Recommendation body) {
+        try {
+            RecommendationEntity entity = mapper.apiToEntity(body);
+            RecommendationEntity newEntity = repository.save(entity);
+
+            log.debug("create recommendation. product id = {}, recommendation id = {}", body.getProductId(), body.getRecommendationId());
+            return mapper.entityToApi(newEntity);
+        } catch(DataIntegrityViolationException dive) {
+            throw new InvalidInputException("dup key. product id: " + body.getProductId() + ", recommendation id: " + body.getRecommendationId());
+        }
+    }
+
+    @Override
+    public void deleteRecommendations(int productId) {
+        log.debug("delete recommendation. product id = {}", productId);
+        repository.deleteAll(repository.findByProductId(productId));
+    }
 }
