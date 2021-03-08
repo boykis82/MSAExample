@@ -48,7 +48,8 @@ public class PersistenceTests {
 
     @Test
     public void update() {
-        savedEntity.setAuthor("a2");
+        String newAuthor = "a2";
+        savedEntity.setAuthor(newAuthor);
         repository.save(savedEntity);
 
         ReviewEntity foundEntity = repository.findById(savedEntity.getId()).get();
@@ -65,10 +66,10 @@ public class PersistenceTests {
 
     @Test
     public void getByProductId() {
-
         List<ReviewEntity> entities = repository.findByProductId(savedEntity.getProductId());
 
         assertEquals(1, entities.size());
+
         assertEqualsReview(savedEntity, entities.get(0));
     }
 
@@ -80,7 +81,6 @@ public class PersistenceTests {
 
     @Test
     public void optimisticLockError() {
-
         // Store the saved entity in two separate entity objects
         ReviewEntity entity1 = repository.findById(savedEntity.getId()).get();
         ReviewEntity entity2 = repository.findById(savedEntity.getId()).get();

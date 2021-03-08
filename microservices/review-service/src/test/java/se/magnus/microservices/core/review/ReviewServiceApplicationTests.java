@@ -5,17 +5,25 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
 import static reactor.core.publisher.Mono.just;
 import static org.springframework.http.HttpStatus.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static se.magnus.api.event.Event.Type.CREATE;
+import static se.magnus.api.event.Event.Type.DELETE;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cloud.stream.messaging.Sink;
 import org.springframework.http.HttpStatus;
+import org.springframework.integration.channel.AbstractMessageChannel;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import se.magnus.api.core.review.Review;
+import se.magnus.api.event.Event;
 import se.magnus.microservices.core.review.persistence.ReviewRepository;
+import se.magnus.util.exceptions.InvalidInputException;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = RANDOM_PORT, properties = {
@@ -28,8 +36,14 @@ public class ReviewServiceApplicationTests {
 	@Autowired
 	private ReviewRepository repository;
 
+	@Autowired
+	private Sink channels;
+
+	private AbstractMessageChannel input = null;
+
 	@Before
 	public void setupDb() {
+		input = (AbstractMessageChannel) channels.input();
 		repository.deleteAll();
 	}
 
@@ -38,11 +52,9 @@ public class ReviewServiceApplicationTests {
 
 		int productId = 1;
 
-		assertEquals(0, repository.findByProductId(productId).size());
-
-		postAndVerifyReview(productId, 1, OK);
-		postAndVerifyReview(productId, 2, OK);
-		postAndVerifyReview(productId, 3, OK);
+		sendCreateReviewEvent(productId, 1);
+		sendCreateReviewEvent(productId, 2);
+		sendCreateReviewEvent(productId, 3);
 
 		assertEquals(3, repository.findByProductId(productId).size());
 
@@ -52,39 +64,53 @@ public class ReviewServiceApplicationTests {
 				.jsonPath("$[2].reviewId").isEqualTo(3);
 	}
 
+	private void sendCreateReviewEvent(int productId, int reviewId) {
+		Review review = new Review(productId, reviewId, "Author " + reviewId, "Subject " + reviewId, "Content " + reviewId, "SA");
+		Event<Integer, Review> event = new Event(CREATE, reviewId, review);
+		input.send(new GenericMessage<>(event));
+	}
+
+	private void sendDeleteReviewEvent(int productId) {
+		Event<Integer, Review> event = new Event(DELETE, productId, null);
+		input.send(new GenericMessage<>(event));
+	}
+
 	@Test
 	public void duplicateError() {
 
 		int productId = 1;
 		int reviewId = 1;
 
-		assertEquals(0, repository.count());
+		sendCreateReviewEvent(productId, reviewId);
 
-		postAndVerifyReview(productId, reviewId, OK)
-				.jsonPath("$.productId").isEqualTo(productId)
-				.jsonPath("$.reviewId").isEqualTo(reviewId);
 
-		assertEquals(1, repository.count());
+		try {
+			sendCreateReviewEvent(productId, reviewId);
+			fail("expected a messageing excepstion here!");
+		} catch(MessagingException me) {
+			if (me.getCause() instanceof InvalidInputException) {
+				InvalidInputException iie = (InvalidInputException)me.getCause();
 
-		postAndVerifyReview(productId, reviewId, UNPROCESSABLE_ENTITY)
-				.jsonPath("$.path").isEqualTo("/review");
-
-		assertEquals(1, repository.count());
+			} else {
+				fail("expected a invalid input exception as the root cause!");
+			}
+		}
+		assertEquals(1, (long)repository.count());
 	}
 
 	@Test
 	public void deleteReviews() {
 
 		int productId = 1;
-		int recommendationId = 1;
+		int reviewId = 1;
 
-		postAndVerifyReview(productId, recommendationId, OK);
+		sendCreateReviewEvent(productId, reviewId);
 		assertEquals(1, repository.findByProductId(productId).size());
 
-		deleteAndVerifyReviewsByProductId(productId, OK);
+		sendDeleteReviewEvent(productId);
 		assertEquals(0, repository.findByProductId(productId).size());
 
-		deleteAndVerifyReviewsByProductId(productId, OK);
+		sendDeleteReviewEvent(productId);
 	}
 
 	@Test

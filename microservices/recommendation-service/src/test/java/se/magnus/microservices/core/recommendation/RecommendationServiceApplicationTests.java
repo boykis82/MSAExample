@@ -5,17 +5,26 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cloud.stream.messaging.Sink;
 import org.springframework.http.HttpStatus;
+import org.springframework.integration.channel.AbstractMessageChannel;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import se.magnus.api.core.recommendation.Recommendation;
+import se.magnus.api.event.Event;
 import se.magnus.microservices.core.recommendation.persistence.RecommendationRepository;
+import se.magnus.util.exceptions.InvalidInputException;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 import static org.springframework.http.HttpStatus.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static reactor.core.publisher.Mono.just;
+import static se.magnus.api.event.Event.Type.CREATE;
+import static se.magnus.api.event.Event.Type.DELETE;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = RANDOM_PORT, properties = {
@@ -29,8 +38,14 @@ public class RecommendationServiceApplicationTests {
 	private RecommendationRepository repository;
 
 
+	@Autowired
+	private Sink channels;
+
+	private AbstractMessageChannel input = null;
+
 	@Before
 	public void setupDb() {
+		input = (AbstractMessageChannel) channels.input();
 		repository.deleteAll();
 	}
 
@@ -39,9 +54,9 @@ public class RecommendationServiceApplicationTests {
 
 		int productId = 1;
 
-		postAndVerifyRecommendation(productId, 1, OK);
-		postAndVerifyRecommendation(productId, 2, OK);
-		postAndVerifyRecommendation(productId, 3, OK);
+		sendCreateRecommendationEvent(productId, 1);
+		sendCreateRecommendationEvent(productId, 2);
+		sendCreateRecommendationEvent(productId, 3);
 
 		assertEquals(3, repository.findByProductId(productId).size());
 
@@ -57,15 +72,21 @@ public class RecommendationServiceApplicationTests {
 		int productId = 1;
 		int recommendationId = 1;
 
-		postAndVerifyRecommendation(productId, recommendationId, OK)
-				.jsonPath("$.productId").isEqualTo(productId)
-				.jsonPath("$.recommendationId").isEqualTo(recommendationId);
+		sendCreateRecommendationEvent(productId, recommendationId);
 
 		assertEquals(1, repository.count());
 
-		postAndVerifyRecommendation(productId, recommendationId, UNPROCESSABLE_ENTITY)
-				.jsonPath("$.path").isEqualTo("/recommendation");
+		try {
+			sendCreateRecommendationEvent(productId, recommendationId);
+			fail("expected a messageing excepstion here!");
+		} catch(MessagingException me) {
+			if (me.getCause() instanceof InvalidInputException) {
+				InvalidInputException iie = (InvalidInputException)me.getCause();
 
+			} else {
+				fail("expected a invalid input exception as the root cause!");
+			}
+		}
 		assertEquals(1, repository.count());
 	}
 
@@ -75,13 +96,13 @@ public class RecommendationServiceApplicationTests {
 		int productId = 1;
 		int recommendationId = 1;
 
-		postAndVerifyRecommendation(productId, recommendationId, OK);
+		sendCreateRecommendationEvent(productId, recommendationId);
 		assertEquals(1, repository.findByProductId(productId).size());
 
-		deleteAndVerifyRecommendationsByProductId(productId, OK);
+		sendDeleteRecommendationEvent(productId);
 		assertEquals(0, repository.findByProductId(productId).size());
 
-		deleteAndVerifyRecommendationsByProductId(productId, OK);
+		sendDeleteRecommendationEvent(productId);
 	}
 
 	@Test
@@ -149,4 +170,14 @@ public class RecommendationServiceApplicationTests {
 				.expectBody();
 	}
 
+	private void sendCreateRecommendationEvent(int productId, int recommendationId) {
+		Recommendation review = new Recommendation(productId, recommendationId, "Author " + recommendationId, 1, "Content " + recommendationId, "SA");
+		Event<Integer, Recommendation> event = new Event(CREATE, recommendationId, review);
+		input.send(new GenericMessage<>(event));
+	}
+
+	private void sendDeleteRecommendationEvent(int productId) {
+		Event<Integer, Recommendation> event = new Event(DELETE, productId, null);
+		input.send(new GenericMessage<>(event));
+	}
 }
